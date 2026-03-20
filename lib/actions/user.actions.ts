@@ -26,6 +26,7 @@ export const getUserInfo = async ({ userId }: getUserInfoProps) => {
       [Query.equal('userId', [userId])]
     )
 
+    if (!user.documents.length) return null;
     return parseStringify(user.documents[0]);
   } catch (error) {
     console.log(error)
@@ -41,7 +42,7 @@ export const signIn = async ({ email, password }: signInProps) => {
       path: "/",
       httpOnly: true,
       sameSite: "strict",
-      secure: true,
+      secure: false,
     });
 
     const user = await getUserInfo({ userId: session.userId }) 
@@ -96,7 +97,7 @@ export const signUp = async ({ password, ...userData }: SignUpParams) => {
       path: "/",
       httpOnly: true,
       sameSite: "strict",
-      secure: true,
+      secure: false,
     });
 
     return parseStringify(newUser);
@@ -107,25 +108,30 @@ export const signUp = async ({ password, ...userData }: SignUpParams) => {
 
 export async function getLoggedInUser() {
   try {
-    const { account } = await createSessionClient();
-    const result = await account.get();
+    const client = await createSessionClient();
 
-    const user = await getUserInfo({ userId: result.$id})
+    if (!client) return null; // ✅ handle no session
+
+    const result = await client.account.get();
+
+    const user = await getUserInfo({ userId: result.$id });
 
     return parseStringify(user);
   } catch (error) {
-    console.log(error)
+    console.log(error);
     return null;
   }
 }
 
 export const logoutAccount = async () => {
   try {
-    const { account } = await createSessionClient();
+    const client = await createSessionClient();
+
+    if (!client) return null; // ✅ avoid crash
 
     cookies().delete('appwrite-session');
 
-    await account.deleteSession('current');
+    await client.account.deleteSession('current');
   } catch (error) {
     return null;
   }
@@ -220,8 +226,7 @@ export const exchangePublicToken = async ({
     });
     
     // If the funding source URL is not created, throw an error
-    if (!fundingSourceUrl) throw Error;
-
+    if (!fundingSourceUrl) throw new Error("Funding source failed");
     // Create a bank account using the user ID, item ID, account ID, access token, funding source URL, and shareableId ID
     await createBankAccount({
       userId: user.$id,
